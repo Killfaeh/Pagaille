@@ -23,13 +23,13 @@ My datasets are exclusively based on my own drawings and illustrations.
 
 ## Architecture
 
-The model is based on a dual-branch architecture. The global branch receives the full illustration resized to 1024×1024 and extracts multi-scale feature maps capturing the stylistic and structural context of the entire drawing. The local branch independently processes each 1024×1024 tile through an encoder/decoder U-Net with a bottleneck. At each decoder level, Attention Gates filter the local encoder skip connections by guiding them with the corresponding global features — allowing the model to decide which local strokes are worth inking while accounting for the overall coherence of the drawing. The output is a 1024×1024 inked tile normalized between -1 and 1 via a Tanh activation.
+The model is based on a dual-branch architecture. The global branch receives the full illustration and extracts six levels of feature maps capturing the stylistic and structural context of the entire drawing. The local branch independently processes each 512×512 tile through an eight-level encoder producing skip connections, a bottleneck, and a symmetric decoder. The global features are injected into the local branch through a fusion layer (1×1 convolution + bilinear interpolation) that aligns both branches before concatenation with the skip connections — allowing the decoder to reconstruct each tile while accounting for both local detail and the overall coherence of the drawing. The output is a 512×512 inked tile normalized via a Tanh activation.
 
 <div align="center">
 <img src="./doc/inking_model_architecture.png">
 </div></br>
 
-During inference, the pencil sketch is on one hand resized to a 1024×1024 overview, and on the other hand split into overlapping 1024×1024 tiles. Inference is performed on each tile individually. The model takes both the current tile and the global overview as input. Finally, the inferred tiles are reassembled into the full image.
+During inference, the pencil sketch is on one hand resized to a 1024×1024 overview, and on the other hand split into overlapping 512×512 tiles. Inference is performed on each tile individually. The model takes both the current tile and the global overview as input. Finally, the inferred tiles are reassembled into the full image.
 
 <div align="center">
 <img src="./doc/inference_overview.png">
