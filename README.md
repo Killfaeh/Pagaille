@@ -17,7 +17,9 @@ My datasets are exclusively based on my own drawings and illustrations.
 
 ## Current results
 
-Image
+<div align="center">
+<img src="./doc/inker-example.jpg">
+</div></br>
 
 ## Architecture
 
