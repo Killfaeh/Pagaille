@@ -12,14 +12,14 @@ print(f"Device    : {device}")
 
 startEpoch = 0
 endEpoch = 100
-startBatch = 120
+startBatch = 3300
 batchSize = 5
-learningRate = 1e-3
+learningRate = 1e-4
 
 inputDir = "/Volumes/AIstuff/Peguy/dataset/inking/all/pencil/"
 targetDir = "/Volumes/AIstuff/Peguy/dataset/inking/all/ink/"
 modelDir = "/Volumes/AIstuff/Peguy/models/inking/"
 
-dataset = GlobalLocalTrainDataset(inputDir, targetDir, 1024, 2)
+dataset = GlobalLocalTrainDataset(inputDir, targetDir, 512, 5)
 model = InkingModel(n_channels=1).to(device)
 trainGlobalLocalUNet(dataset, model, modelDir, startEpoch, endEpoch, startBatch, batchSize, learningRate)
