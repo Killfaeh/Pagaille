@@ -44,19 +44,6 @@ STEP = int(CANVAS_SIZE/N_SIDE)
 VARIATION = 0.25
 
 
-def removeBackground(image):
-
-	background = cv2.GaussianBlur(image, (201, 201), 0)
-	
-	tmpBackground = 1.0 - background/255.0
-	tmpImage = 1.0 - image/255.0
-	tmpImage = tmpImage-tmpBackground*0.5
-	tmpImage = (1.0 - tmpImage)
-	
-	normalized = (tmpImage * 255).clip(0, 255).astype(np.uint8)
-	
-	return normalized
-
 for i in range(N_CANVAS):
 
 	print("Creating canvas {}...".format(i))
@@ -90,7 +77,6 @@ for i in range(N_CANVAS):
 			selectIndex = selectIndex + 1
 	
 	canvasPencil = canvasPencil[int(CANVAS_SIZE/2):int(CANVAS_SIZE/2) + CANVAS_SIZE, int(CANVAS_SIZE/2):int(CANVAS_SIZE/2) + CANVAS_SIZE]
-	#canvasPencil = removeBackground(canvasPencil)
 	canvasInk = canvasInk[int(CANVAS_SIZE/2):int(CANVAS_SIZE/2) + CANVAS_SIZE, int(CANVAS_SIZE/2):int(CANVAS_SIZE/2) + CANVAS_SIZE]
 	
 	cv2.imwrite("{}img{}.png".format(outputPencilPath, i), canvasPencil)
