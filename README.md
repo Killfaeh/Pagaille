@@ -29,7 +29,9 @@ The model is based on a dual-branch architecture. The global branch receives the
 
 During inference, the pencil sketch is on one hand resized to a 1024×1024 overview, and on the other hand split into overlapping 1024×1024 tiles. Inference is performed on each tile individually. The model takes both the current tile and the global overview as input. Finally, the inferred tiles are reassembled into the full image.
 
-Image
+<div align="center">
+<img src="./doc/inference_overview.png">
+</div></br>
 
 ## Tech stack
 
