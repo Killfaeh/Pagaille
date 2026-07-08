@@ -3,6 +3,7 @@ from torch.utils.data import Dataset
 import cv2
 import os
 from os import listdir
+import random
 
 from suisei.imageprocessing.size import *
 from suisei.imageprocessing.crop import *
@@ -70,30 +71,33 @@ class GlobalLocalTrainDataset(Dataset):
 	def getItem(self, index, batchSize):
 	
 		img_index  = index // self.n_tiles
-	
+		
 		input = cv2.imread(str(self.inputPaths[img_index]),  self.colorMode)
 		target = cv2.imread(str(self.targetPaths[img_index]), self.colorMode)
 		
-		fullInput = resize(input, self.tile_size, self.tile_size)
+		fullInput = resize(input, 2*self.tile_size, 2*self.tile_size)
 		
 		fullInput = torch.from_numpy(fullInput).unsqueeze(0).float() / 127.5 - 1.0
-		input = torch.from_numpy(input).unsqueeze(0).float() / 127.5 - 1.0
-		target = torch.from_numpy(target).unsqueeze(0).float() / 127.5 - 1.0
-	
+		inputTensor = torch.from_numpy(input).unsqueeze(0).float() / 127.5 - 1.0
+		targetTensor = torch.from_numpy(target).unsqueeze(0).float() / 127.5 - 1.0
+		
 		fullList = []
 		inputList = []
 		targetList = []
 	
 		for i in range(batchSize):
 	
-			tiles = randomTile([input[0], target[0]], self.tile_size)
+			tiles = randomTile([input, target], self.tile_size)
 			
-			inputTile = tiles[0].reshape((1, tiles[0].shape[0], tiles[0].shape[1]))
-			targetTile = tiles[1].reshape((1, tiles[1].shape[0], tiles[1].shape[1]))
+			inputTile = tiles[0]
+			targetTile = tiles[1]
+			
+			inputTileTensor = torch.from_numpy(inputTile).unsqueeze(0).float() / 127.5 - 1.0
+			targetTileTensor = torch.from_numpy(targetTile).unsqueeze(0).float() / 127.5 - 1.0
 			
 			fullList.append(fullInput)
-			inputList.append(inputTile)
-			targetList.append(targetTile)
+			inputList.append(inputTileTensor)
+			targetList.append(targetTileTensor)
 			
 		fullList = torch.stack(fullList, dim=0)
 		inputList= torch.stack(inputList, dim=0)

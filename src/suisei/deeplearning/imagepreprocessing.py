@@ -61,7 +61,7 @@ def inkingPreprocessing(inputImg):
 	print("	Bilateral filter {}, {}...".format(BFSize, BFtolerance))
 	outputImg = cv2.bilateralFilter(outputImg, BFSize, BFtolerance, 75)
 	endTime = time.time()
-	execTime = (endTime-startTime)/60.0
-	print("	Bilateral filter {}, {} execution : {}".format(BFSize, BFtolerance, execTime))
+	execTime = (endTime-startTime)
+	print("	Bilateral filter {}, {} execution : {}s".format(BFSize, BFtolerance, execTime))
 	
 	return outputImg

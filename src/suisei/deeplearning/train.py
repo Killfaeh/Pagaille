@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 import time
 
 from suisei.deeplearning.checkpoint import *
+from suisei.deeplearning.networks import *
 
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
@@ -71,8 +72,32 @@ def trainUNet(dataset, model, modelDir, startEpoch, endEpoch, startBatch, batchS
 		
 		print(f"	Epoch {epoch + 1:04d}/{endEpoch} — Time : {execTime} — Loss : {epoch_loss:.6f} — LR : {scheduler.get_last_lr()[0]:.2e}")
 		
-		
-def trainGlobalLocalUNet(dataset, model, modelDir, startEpoch, endEpoch, startBatch, batchSize, learningRate=1e-3):
+
+def attention_regularization(model, lambda_att=0.01):
+	
+	reg = torch.tensor(0.0, device=next(model.parameters()).device)
+	
+	for module in model.modules():
+		if isinstance(module, AttentionGate) and module.last_attention is not None:
+			reg += module.last_attention.mean()
+	
+	return reg * lambda_att
+
+
+def attention_entropy_loss(model, lambda_att=0.01):
+
+	loss = torch.tensor(0.0, device=next(model.parameters()).device)
+
+	for module in model.modules():
+		if isinstance(module, AttentionGate) and module.last_attention is not None:
+			att = module.last_attention
+			entropy = -(att * torch.log(att + 1e-6) + (1 - att) * torch.log(1 - att + 1e-6))
+			loss += entropy.mean()
+	
+	return loss * lambda_att
+
+
+def trainGlobalLocalUNet(dataset, model, modelDir, startEpoch, endEpoch, startBatch, batchSize, learningRate=1e-4):
 
 	dataloader = DataLoader(dataset, batch_size=batchSize, shuffle=True, num_workers=0)
 
@@ -109,7 +134,10 @@ def trainGlobalLocalUNet(dataset, model, modelDir, startEpoch, endEpoch, startBa
 				optimizer.zero_grad()
 				loss.backward()
 				optimizer.step()
+				#print(model.local_branch.output[0].weight.abs().mean())
+				#print(model.local_branch.output[0].weight.abs().max())
 				
+				print("Loss: ", loss.item())
 				epoch_loss += loss.item()
 				
 				# Je fais une petite sauvegarde des checkpoints tous les 20 batch afin de ne pas perdre trop de temps d'entraînement en cas d'interruption
@@ -120,6 +148,9 @@ def trainGlobalLocalUNet(dataset, model, modelDir, startEpoch, endEpoch, startBa
 				if index%100 == 0:
 					path = "{}model_{}_{}.pth".format(modelDir, epoch, index)
 					torch.save(model.state_dict(), path)
+					model.eval()
+					model.test(epoch, index)
+					model.train()
 			else:
 				print("	skip batch {}/{}/{}".format(index, startBatch, len(dataloader)))
 			

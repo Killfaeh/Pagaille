@@ -1,6 +1,12 @@
 import torch
 import torch.nn as nn
 
+from suisei.deeplearning.imagepreprocessing import *
+from suisei.deeplearning.checkpoint import *
+from suisei.deeplearning.inference import *
+
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
 class DownBlock(nn.Module):
 
 	def __init__(self, in_channels, out_channels, batchnorm=True):
@@ -10,7 +16,8 @@ class DownBlock(nn.Module):
 		layers = [nn.Conv2d(in_channels, out_channels, 4, stride=2, padding=1, bias=not batchnorm)]
 		
 		if batchnorm:
-			layers.append(nn.BatchNorm2d(out_channels))
+			layers.append(nn.GroupNorm(32, out_channels))
+			#layers.append(nn.BatchNorm2d(out_channels))
 		
 		layers.append(nn.LeakyReLU(0.2))
 		self.block = nn.Sequential(*layers)
@@ -29,7 +36,8 @@ class UpBlock(nn.Module):
 
 		layers = [
 			nn.ConvTranspose2d(in_channels, out_channels, 4, stride=2, padding=1, bias=False),
-			nn.BatchNorm2d(out_channels),
+			nn.GroupNorm(32, out_channels)
+			#nn.BatchNorm2d(out_channels),
 		]
 			
 		if dropout:
@@ -62,6 +70,7 @@ class AttentionGate(nn.Module):
 		self.norm  = nn.InstanceNorm2d(F_int)
 		self.relu  = nn.ReLU()
 		self.sigma = nn.Sigmoid()
+		self.last_attention = None
 	
 	def forward(self, g, x):
 	
@@ -72,6 +81,8 @@ class AttentionGate(nn.Module):
 		attention = self.sigma(
 			self.psi(self.relu(self.norm(g_up + self.W_x(x))))
 		)
+			
+		self.last_attention = attention
 		
 		return x * attention
 
@@ -235,7 +246,8 @@ class LocalBranch(nn.Module):
 		
 		super().__init__()
 		
-		# Encodeur local
+		# Encodeur — identique
+		#"""
 		self.enc1 = DownBlock(n_channels, 64,  batchnorm=False)
 		self.enc2 = DownBlock(64,          128, batchnorm=True)
 		self.enc3 = DownBlock(128,         256, batchnorm=True)
@@ -243,9 +255,8 @@ class LocalBranch(nn.Module):
 		self.enc5 = DownBlock(512,         512, batchnorm=True)
 		self.enc6 = DownBlock(512,         512, batchnorm=True)
 		self.enc7 = DownBlock(512,         512, batchnorm=True)
-		self.enc8 = DownBlock(512,         512, batchnorm=True)
 		
-		# Bottleneck
+		# Bottleneck — identique
 		self.bottleneck = nn.Sequential(
 			nn.Conv2d(512, 512, 4, stride=2, padding=1, bias=False),
 			nn.ReLU()
@@ -253,36 +264,32 @@ class LocalBranch(nn.Module):
 		
 		nn.init.normal_(self.bottleneck[0].weight, mean=0.0, std=0.02)
 		
-		# Couches de fusion global
-		# Canaux : local + global → local
+		# Couches de fusion — identiques
+		self.fuse6 = nn.Conv2d(512 + 512, 512, 1)
 		self.fuse5 = nn.Conv2d(512 + 512, 512, 1)
 		self.fuse4 = nn.Conv2d(512 + 512, 512, 1)
 		self.fuse3 = nn.Conv2d(256 + 256, 256, 1)
 		self.fuse2 = nn.Conv2d(128 + 128, 128, 1)
 		self.fuse1 = nn.Conv2d(64  + 64,  64,  1)
 		
-		# Attention Gates
-		self.att8 = AttentionGate(F_g=512,  F_l=512, F_int=256)
-		self.att7 = AttentionGate(F_g=1024, F_l=512, F_int=256)
-		self.att6 = AttentionGate(F_g=1024, F_l=512, F_int=256)
-		self.att5 = AttentionGate(F_g=1024, F_l=512, F_int=256)
-		self.att4 = AttentionGate(F_g=1024, F_l=512, F_int=256)
-		self.att3 = AttentionGate(F_g=1024, F_l=256, F_int=128)
-		self.att2 = AttentionGate(F_g=512, F_l=128, F_int=64)
-		self.att1 = AttentionGate(F_g=256, F_l=64,  F_int=32)
+		"""
+		for layer in [ self.fuse6, self.fuse5, self.fuse4, self.fuse3, self.fuse2, self.fuse1, ]:
+			nn.init.normal_(layer.weight, mean=0.0, std=0.02)
+			
+			if layer.bias is not None:
+				nn.init.zeros_(layer.bias)
+		#"""
 		
-		# Décodeur
-		self.dec0 = UpBlock(512,  512, dropout=True)
-		self.dec1 = UpBlock(1024,  512, dropout=True)
+		# Décodeur — identique jusqu'à dec7
+		self.dec1 = UpBlock(512,  512, dropout=True)
 		self.dec2 = UpBlock(1024, 512, dropout=True)
 		self.dec3 = UpBlock(1024, 512, dropout=True)
 		self.dec4 = UpBlock(1024, 512, dropout=False)
 		self.dec5 = UpBlock(1024, 256, dropout=False)
 		self.dec6 = UpBlock(512,  128, dropout=False)
 		self.dec7 = UpBlock(256,  64,  dropout=False)
-
 		
-		# Sortie
+		# Sortie 1024×1024
 		self.output = nn.Sequential(
 			nn.ConvTranspose2d(128, n_channels, 4, stride=2, padding=1),
 			nn.Tanh()
@@ -299,6 +306,7 @@ class LocalBranch(nn.Module):
 		
 		return fuse_layer(torch.cat([local_feat, global_resized], dim=1))
 
+        
 	def forward(self, x, global_features):
 		
 		gf1, gf2, gf3, gf4, gf5, gf6 = global_features
@@ -311,9 +319,9 @@ class LocalBranch(nn.Module):
 		e5 = self.enc5(e4)
 		e6 = self.enc6(e5)
 		e7 = self.enc7(e6)
-		e8 = self.enc8(e7)
 		
 		# Fusion des skip connections avec le contexte global
+		e6_fused = self._fuse(e6, gf6, self.fuse6)
 		e5_fused = self._fuse(e5, gf5, self.fuse5)
 		e4_fused = self._fuse(e4, gf4, self.fuse4)
 		e3_fused = self._fuse(e3, gf3, self.fuse3)
@@ -321,34 +329,41 @@ class LocalBranch(nn.Module):
 		e1_fused = self._fuse(e1, gf1, self.fuse1)
 		
 		# Bottleneck
-		x = self.bottleneck(e8)
+		x = self.bottleneck(e7)
 		
-		# Décodeur avec Attention Gates sur les skip connections
-		e8_att = self.att8(g=x,  x=e8) 
-		x = self.dec0(x, e8_att)
+		"""
+		print("gf6", gf6.abs().max().item())
+		print("e6", e6.abs().max().item())
+		print("e7", e7.abs().max().item())
+		print("e6_fused", e6_fused.abs().max().item())
+		print("Bottleneck", x.abs().max().item())
+		#"""
 		
-		e7_att = self.att7(g=x,  x=e7) 
-		x = self.dec1(x, e7_att)
+		# Décodeur
+		x = self.dec1(x,  e7)
+		#print("dec1", x.abs().max().item())
+		x = self.dec2(x,  e6_fused)
+		#print("dec2", x.abs().max().item())
+		x = self.dec3(x,  e5_fused)
+		#print("dec3", x.abs().max().item())
+		x = self.dec4(x,  e4_fused)
+		#print("dec4", x.abs().max().item())
+		x = self.dec5(x,  e3_fused)
+		#print("dec5", x.abs().max().item())
+		x = self.dec6(x,  e2_fused)
+		#print("dec6", x.abs().max().item())
+		x = self.dec7(x,  e1_fused)
+		#print("dec7", x.abs().max().item())
 		
-		e6_att = self.att6(g=x,  x=e6) 
-		x = self.dec2(x, e6_att)
+		#return self.output(x)
+
+		conv = self.output[0](x)
 		
-		e5_att = self.att5(g=x,  x=e5_fused) 
-		x = self.dec3(x, e5_att)
+		#print( conv.min().item(), conv.max().item(), conv.mean().item() )
+		out = torch.tanh(conv)
+		#print( out.min().item(), out.max().item(), out.mean().item() )
 		
-		e4_att = self.att4(g=x,  x=e4_fused) 
-		x = self.dec4(x, e4_att)
-		
-		e3_att = self.att3(g=x,  x=e3_fused) 
-		x = self.dec5(x, e3_att)
-		
-		e2_att = self.att2(g=x,  x=e2_fused) 
-		x = self.dec6(x, e2_att)
-		
-		e1_att = self.att1(g=x,  x=e1_fused) 
-		x = self.dec7(x, e1_att)
-		
-		return self.output(x)
+		return out
 		
 		
 class InkingModel(nn.Module):
@@ -361,3 +376,13 @@ class InkingModel(nn.Module):
 	def forward(self, tile, full_image):
 		global_features = self.global_branch(full_image)
 		return self.local_branch(tile, global_features)
+	
+	def test(self, epoch, batch):
+		print("Test epoch {}, batch {}".format(epoch, batch))
+		modelPath = "/Volumes/AIstuff/Peguy/models/inking/model_{}_{}.pth".format(epoch, batch)
+		inputFile = "/Users/suisei/Workspace/01_DessinIllustration-TravailEnCours/StarTrek/Inktober2023/Inktober2023-001-scan.jpeg"
+		outputFile = "/Users/suisei/Desktop/training-test-inking-{}-{}.png".format(epoch, batch)
+		npImg = cv2.imread(str(inputFile), cv2.IMREAD_GRAYSCALE)
+		npImg = inkingPreprocessing(npImg)
+		result = execGlobalLocalUNet(self, npImg, tile_size=512, overlap=64, device=device)
+		cv2.imwrite(str(outputFile), result)

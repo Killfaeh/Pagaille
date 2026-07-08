@@ -26,7 +26,7 @@ def load_checkpoint(dirPath, epoch, index, model, optimizer, scheduler):
 	if os.path.isfile(path):
 		print("Load checkpoint {}...".format(path))
 		ckpt = torch.load(path, map_location=device)
-		model.state_dict(ckpt["model_state_dict"])
+		#model.state_dict(ckpt["model_state_dict"])
 		model.load_state_dict(ckpt["model_state_dict"])
 		optimizer.load_state_dict(ckpt["optimizer_state_dict"])
 		scheduler.load_state_dict(ckpt["scheduler_state_dict"])
